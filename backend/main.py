@@ -26,7 +26,7 @@ from models import (
     CategoryCount,
     AnalyticsOverview,
 )
-from scraper import scrape, ScrapingError
+from scraper import scrape, ScrapingError, ScrapedContent, detect_platform
 from gemini import (
     categorize_post,
     ask_feed,
@@ -116,8 +116,14 @@ async def save_post(
     # ── Step 2: Scrape metadata ───────────────────────────────────
     try:
         scraped = await scrape(body.url, body.manual_text)
-    except ScrapingError as e:
-        raise HTTPException(status_code=422, detail=f"Scraping failed: {e}")
+    except ScrapingError:
+        # Graceful fallback: Platforms like Instagram frequently IP-block cloud scrapers.
+        # Save the raw URL anyway so the user does not lose their saved link!
+        scraped = ScrapedContent(
+            title=body.url,
+            description="Automated metadata scraping was temporarily blocked by the platform.",
+            platform=detect_platform(body.url)
+        )
 
     # ── Step 3: Classify via Gemini ───────────────────────────────
     try:
